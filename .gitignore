@@ -2,6 +2,7 @@
 *.html
 *.exe
 *.txt
+*.iml
 .idea/
 out/
 javadoc/
