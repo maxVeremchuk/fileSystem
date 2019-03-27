@@ -1,0 +1,7 @@
+*.class
+*.html
+*.exe
+*.txt
+.idea/
+out/
+javadoc/
