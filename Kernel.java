@@ -1366,13 +1366,13 @@ public class Kernel {
     }
     IndexNode currIndexNode = new IndexNode();
     short currIndexNodeNumber = getCurrIndexNodeNumber(pathname, currIndexNode);
-    // System.out.println("Before:" + process.getUid() + " " + currIndexNode.getUid());
+     //System.out.println("Before:" + process.getUid() + " " + currIndexNode.getUid());
     // short currIndexNodeNumber = fileDescriptor.getIndexNodeNumber();
     closeChanged(currIndexNodeNumber);
     currIndexNode.setUid(uid);
     FileSystem fileSystem = openFileSystems[ROOT_FILE_SYSTEM];
     fileSystem.writeIndexNode(currIndexNode, currIndexNodeNumber);
-    // System.out.println("After: " + process.getUid() + " " + currIndexNode.getUid());
+     //System.out.println("After: " + process.getUid() + " " + currIndexNode.getUid());
     return uid;
   }
 
