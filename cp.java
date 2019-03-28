@@ -80,7 +80,7 @@ public class cp {
     }
 
     // open the output file
-    int out_fd = Kernel.creat(out_name, OUTPUT_MODE);
+    int out_fd = Kernel.creat(out_name, Kernel.S_IFREG);
     if (out_fd < 0) {
       Kernel.perror(PROGRAM_NAME);
       System.err.println(PROGRAM_NAME + ": unable to open output file \"" + argv[1] + "\"");

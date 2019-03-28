@@ -3,6 +3,7 @@
  * 456789012345678901234567890123456789012345678901234567890123456789012
  */
 
+import javax.swing.plaf.synth.SynthTabbedPaneUI;
 import java.io.FileOutputStream;
 import java.util.StringTokenizer;
 import java.util.Properties;
@@ -361,11 +362,14 @@ public class Kernel {
 
       int protectionInfo = 0;
 
-      if ((currIndexNode.getMode() & S_IFMT) != S_IFDIR) {
+      if ((mode & S_IFMT) == S_IFDIR) {
         protectionInfo |=
             S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH;
-      } else if ((currIndexNode.getMode() & S_IFMT) == S_IFREG) {
+      } else if ((mode & S_IFMT) == S_IFREG) {
         protectionInfo |= S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+      } else {
+        System.out.println("You're trying to create not regular file or directory");
+        return -1;
       }
 
       String protectionInfoOctal = Integer.toOctalString(protectionInfo),
@@ -848,18 +852,36 @@ public class Kernel {
     // write out free list blocks if updated
     // write out inode blocks if updated
     // write out data blocks if updated
-    Properties properties = new Properties();
-    properties.put("filesystem.root.filename", "filesys.dat");
-    properties.put("filesystem.root.mode", "rw");
-    properties.put("process.uid", "" + syncProcess.getUid());
-    properties.put("process.gid", "" + syncProcess.getGid());
-    properties.put("process.umask", "" + String.format("%03o", syncProcess.getUmask()));
-    properties.put("process.dir", "/root");
 
-    String propertyFileName = "myConfig.conf";
+    String propertyFileName = System.getProperty("filesys.conf");
+    if (propertyFileName == null) propertyFileName = "filesys.conf";
+    Properties properties = new Properties();
+    try {
+      FileInputStream in = new FileInputStream(propertyFileName);
+      properties.load(in);
+      in.close();
+    } catch (FileNotFoundException e) {
+      System.err.println(PROGRAM_NAME + ": error opening properties file");
+      System.exit(EXIT_FAILURE);
+    } catch (IOException e) {
+      System.err.println(PROGRAM_NAME + ": error reading properties file");
+      System.exit(EXIT_FAILURE);
+    }
+
+    properties.setProperty("process.umask", String.format("%03o", syncProcess.getUmask()));
+    properties.setProperty("filesystem.root.filename", "filesys.dat");
+    properties.setProperty("filesystem.root.mode", "rw");
+    properties.setProperty("process.uid", "" + syncProcess.getUid());
+    properties.setProperty("process.gid", "" + syncProcess.getGid());
+    properties.setProperty("process.umask", "" + String.format("%03o", syncProcess.getUmask()));
+    properties.setProperty("process.dir", "/root");
+    properties.setProperty(
+        "process.max_open_files", Integer.toString(ProcessContext.MAX_OPEN_FILES));
+    properties.setProperty("kernel.max_open_files", Integer.toString(MAX_OPEN_FILES));
+
     try {
       FileOutputStream out = new FileOutputStream(propertyFileName);
-      properties.save(out, null);
+      properties.store(out, null);
       out.close();
     } catch (FileNotFoundException e) {
       System.err.println(PROGRAM_NAME + ": error opening properties file");
@@ -994,14 +1016,14 @@ public class Kernel {
 
   public static short umask(short newUmask) {
     try {
-      newUmask = Short.parseShort(Short.toString(newUmask), 8);
+      newUmask = Short.parseShort(Short.toString(newUmask));
     } catch (NumberFormatException e) {
       System.err.println(PROGRAM_NAME + ": invalid number for property process.umask");
       System.exit(EXIT_FAILURE);
     }
 
     short oldUmask = process.getUmask();
-    System.out.println("Set umask to " + Integer.toOctalString(newUmask));
+    System.out.println("Set umask to " + String.format("%03o", newUmask));
     process.setUmask(newUmask);
     return oldUmask;
   }

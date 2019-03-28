@@ -64,7 +64,7 @@ public class tee {
     String name = argv[0];
 
     // create the output file
-    int out_fd = Kernel.creat(name, OUTPUT_MODE);
+    int out_fd = Kernel.creat(name, Kernel.S_IFREG);
     if (out_fd < 0) {
       Kernel.perror(PROGRAM_NAME);
       System.err.println(PROGRAM_NAME + ": unable to open output file \"" + name + "\"");
