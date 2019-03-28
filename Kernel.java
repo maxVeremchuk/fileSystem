@@ -982,8 +982,15 @@ public class Kernel {
   }
 
   public static short umask(short newUmask) {
+    try {
+      newUmask = Short.parseShort(Short.toString(newUmask), 8);
+    } catch (NumberFormatException e) {
+      System.err.println(PROGRAM_NAME + ": invalid number for property process.umask");
+      System.exit(EXIT_FAILURE);
+    }
+
     short oldUmask = process.getUmask();
-    System.out.println("Set mask");
+    System.out.println("Set umask to " + Integer.toOctalString(newUmask));
     process.setUmask(newUmask);
     return oldUmask;
   }
