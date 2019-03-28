@@ -1629,20 +1629,13 @@ public class Kernel {
     closeChanged(currIndexNodeNumber);
 
     short currMode = currIndexNode.getMode();
-    String binaryString = Integer.toBinaryString(currMode);
-    String binaryStringMode = Integer.toBinaryString(mode);
-    String newBinaryMode = "";
-    for (int n = 0; n < binaryString.length() - 9; n++) {
-      newBinaryMode += binaryString.charAt(n);
-    }
-    while (binaryStringMode.length() < 9) {
-      binaryStringMode = "0" + binaryStringMode;
-    }
-    for (int n = 0; n < 9; n++) {
-      newBinaryMode += binaryStringMode.charAt(n);
-    }
-    mode = (short) Integer.parseInt(newBinaryMode, 2);
-    currIndexNode.setMode(mode);
+
+
+    String currModeOctal = Integer.toOctalString(currMode);
+    String modeOctal = Integer.toString(mode);
+    String newMode = currModeOctal.substring(0, currModeOctal.length() - modeOctal.length()) + modeOctal;
+
+    currIndexNode.setMode(Short.parseShort(newMode, 8));
 
     FileSystem fileSystem = openFileSystems[ROOT_FILE_SYSTEM];
     fileSystem.writeIndexNode(currIndexNode, currIndexNodeNumber);
