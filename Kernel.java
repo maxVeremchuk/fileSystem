@@ -1406,9 +1406,26 @@ public class Kernel {
       process.errno = EPERM;
       return -1;
     }
+
     // short currIndexNodeNumber = fileDescriptor.getIndexNodeNumber();
     closeChanged(currIndexNodeNumber);
+
+    short currMode = currIndexNode.getMode();
+    String binaryString = Integer.toBinaryString(currMode);
+    String binaryStringMode = Integer.toBinaryString(mode);
+    String newBinaryMode = "";
+    for(int n=0; n<binaryString.length() - 9; n++) {
+      newBinaryMode += binaryString.charAt(n);
+    }
+    while(binaryStringMode.length() < 9){
+      binaryStringMode = "0" + binaryStringMode;
+    }
+    for(int n=0; n<9; n++) {
+      newBinaryMode += binaryStringMode.charAt(n);
+    }
+    mode = (short)Integer.parseInt(newBinaryMode,2);
     currIndexNode.setMode(mode);
+
     FileSystem fileSystem = openFileSystems[ROOT_FILE_SYSTEM];
     fileSystem.writeIndexNode(currIndexNode, currIndexNodeNumber);
 
