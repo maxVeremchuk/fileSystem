@@ -120,10 +120,10 @@ public class ls {
     // append mode information
     ts = (short) stat.getMode();
     s.append(' ');
-    s.append(ts);
-    /*s.append((ts & Kernel.S_IRWXU) >> 6);
+    //s.append(ts);
+    s.append((ts & Kernel.S_IRWXU) >> 6);
     s.append((ts & Kernel.S_IRWXG) >> 3);
-    s.append(ts & Kernel.S_IRWXO);*/
+    s.append(ts & Kernel.S_IRWXO);
     s.append(' ');
 
     // append uid info
