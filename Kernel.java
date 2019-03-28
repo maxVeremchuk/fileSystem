@@ -368,7 +368,18 @@ public class Kernel {
         protectionInfo |= S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
       }
 
-      protectionInfo ^= process.getUmask();
+      String protectionInfoOctal = Integer.toOctalString(protectionInfo),
+          umaskOctal = String.format("%03o", process.getUmask());
+
+      StringBuilder resultPermission = new StringBuilder();
+
+      for (int i = 0; i < protectionInfoOctal.length(); i++) {
+        if (protectionInfoOctal.charAt(i) >= umaskOctal.charAt(i))
+          resultPermission.append(protectionInfoOctal.charAt(i) - umaskOctal.charAt(i));
+        else resultPermission.append(0);
+      }
+
+      protectionInfo = Integer.parseInt(resultPermission.toString(), 8);
 
       int oldPermissions = mode % ((int) Math.pow(2, 9)),
           newMode = mode - oldPermissions + protectionInfo;
@@ -993,6 +1004,137 @@ public class Kernel {
     System.out.println("Set umask to " + Integer.toOctalString(newUmask));
     process.setUmask(newUmask);
     return oldUmask;
+  }
+
+  public static int link(String path1, String path2) throws Exception {
+
+    int fd = open(path1, O_RDWR);
+    if (fd < 0) {
+      return -1;
+    }
+
+    FileDescriptor fileDescriptor1 = process.openFiles[fd];
+    IndexNode indexNode1 = fileDescriptor1.getIndexNode();
+    if ((indexNode1.getMode() & S_IFMT) == S_IFDIR) {
+      System.out.println("You can't create hard link to directory!");
+      return -1;
+    }
+
+    // get the full path
+    String fullPath = getFullPath(path2);
+
+    StringBuffer dirname = new StringBuffer("/");
+    FileSystem fileSystem = openFileSystems[ROOT_FILE_SYSTEM];
+    IndexNode currIndexNode = getRootIndexNode();
+    IndexNode prevIndexNode = null;
+    short indexNodeNumber = FileSystem.ROOT_INDEX_NODE_NUMBER;
+
+    StringTokenizer st = new StringTokenizer(fullPath, "/");
+    String name = "."; // start at root node
+    while (st.hasMoreTokens()) {
+      name = st.nextToken();
+      if (!name.equals("")) {
+        // check to see if the current node is a directory
+        if ((currIndexNode.getMode() & S_IFMT) != S_IFDIR) {
+          // return (ENOTDIR) if a needed directory is not a directory
+          process.errno = ENOTDIR;
+          return -1;
+        }
+
+        // check to see if it is readable by the user
+        // ??? tbd
+        // return (EACCES) if a needed directory is not readable
+
+        if (st.hasMoreTokens()) {
+          dirname.append(name);
+          dirname.append('/');
+        }
+
+        // get the next inode corresponding to the token
+        prevIndexNode = currIndexNode;
+        currIndexNode = new IndexNode();
+        indexNodeNumber = findNextIndexNode(fileSystem, prevIndexNode, name, currIndexNode);
+      }
+    }
+
+    if (indexNodeNumber < 0) {
+      // file does not exist.  We check to see if we can create it.
+
+      // check to see if the prevIndexNode (a directory) is writeable
+      // ??? tbd
+      // return (EACCES) if the file does not exist and the directory
+      // in which it is to be created is not writable
+
+      indexNode1.setNlink((short) (currIndexNode.getNlink() + 1));
+
+      // open the directory
+      // ??? it would be nice if we had an "open" that took an inode
+      // instead of a name for the dir
+      int dir = open(dirname.toString(), O_RDWR);
+      if (dir < 0) {
+        Kernel.perror(PROGRAM_NAME);
+        System.err.println(PROGRAM_NAME + ": unable to open directory for writing");
+        Kernel.exit(1); // ??? is this correct
+      }
+
+      // scan past the directory entries less than the current entry
+      // and insert the new element immediately following
+      int status;
+      DirectoryEntry newDirectoryEntry =
+          new DirectoryEntry(fileDescriptor1.getIndexNodeNumber(), name);
+      DirectoryEntry currentDirectoryEntry = new DirectoryEntry();
+      while (true) {
+        // read an entry from the directory
+        status = readdir(dir, currentDirectoryEntry);
+        if (status < 0) {
+          System.err.println(PROGRAM_NAME + ": error reading directory in creat");
+          System.exit(EXIT_FAILURE);
+        } else if (status == 0) {
+          // if no entry read, write the new item at the current
+          // location and break
+          writedir(dir, newDirectoryEntry);
+          break;
+        } else {
+          // if current item > new item, write the new item in
+          // place of the old one and break
+          if (currentDirectoryEntry.getName().compareTo(newDirectoryEntry.getName()) > 0) {
+            int seek_status = lseek(dir, -DirectoryEntry.DIRECTORY_ENTRY_SIZE, 1);
+            if (seek_status < 0) {
+              System.err.println(PROGRAM_NAME + ": error during seek in creat");
+              System.exit(EXIT_FAILURE);
+            }
+            writedir(dir, newDirectoryEntry);
+            break;
+          }
+        }
+      }
+      // copy the rest of the directory entries out to the file
+      while (status > 0) {
+        DirectoryEntry nextDirectoryEntry = new DirectoryEntry();
+        // read next item
+        status = readdir(dir, nextDirectoryEntry);
+        if (status > 0) {
+          // in its place
+          int seek_status = lseek(dir, -DirectoryEntry.DIRECTORY_ENTRY_SIZE, 1);
+          if (seek_status < 0) {
+            System.err.println(PROGRAM_NAME + ": error during seek in creat");
+            System.exit(EXIT_FAILURE);
+          }
+        }
+        // write current item
+        writedir(dir, currentDirectoryEntry);
+        // current item = next item
+        currentDirectoryEntry = nextDirectoryEntry;
+      }
+
+      // close the directory
+      close(dir);
+    } else {
+      System.out.println("File already exists!");
+      return -1;
+    }
+
+    return open(fileDescriptor1);
   }
 
   /*
