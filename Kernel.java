@@ -3,6 +3,7 @@
  * 456789012345678901234567890123456789012345678901234567890123456789012
  */
 
+import java.io.FileOutputStream;
 import java.util.StringTokenizer;
 import java.util.Properties;
 import java.io.FileInputStream;
@@ -358,7 +359,21 @@ public class Kernel {
       // return (EACCES) if the file does not exist and the directory
       // in which it is to be created is not writable
 
-      currIndexNode.setMode(mode);
+      int protectionInfo = 0;
+
+      if ((currIndexNode.getMode() & S_IFMT) != S_IFDIR) {
+        protectionInfo |=
+            S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH;
+      } else if ((currIndexNode.getMode() & S_IFMT) == S_IFREG) {
+        protectionInfo |= S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+      }
+
+      protectionInfo ^= process.getUmask();
+
+      int oldPermissions = mode % ((int) Math.pow(2, 9)),
+          newMode = mode - oldPermissions + protectionInfo;
+
+      currIndexNode.setMode((short) newMode);
       currIndexNode.setNlink((short) 1);
 
       // allocate the next available inode from the file system
@@ -495,6 +510,8 @@ public class Kernel {
         close(i);
       }
 
+    // save configuration
+    syncProcess = process;
     // terminate the process
     process = null;
     processCount--;
@@ -820,7 +837,28 @@ public class Kernel {
     // write out free list blocks if updated
     // write out inode blocks if updated
     // write out data blocks if updated
+    Properties properties = new Properties();
+    properties.put("filesystem.root.filename", "filesys.dat");
+    properties.put("filesystem.root.mode", "rw");
+    properties.put("process.uid", "" + syncProcess.getUid());
+    properties.put("process.gid", "" + syncProcess.getGid());
+    properties.put("process.umask", "" + String.format("%03o", syncProcess.getUmask()));
+    properties.put("process.dir", "/root");
 
+    String propertyFileName = "myConfig.conf";
+    try {
+      FileOutputStream out = new FileOutputStream(propertyFileName);
+      properties.save(out, null);
+      out.close();
+    } catch (FileNotFoundException e) {
+      System.err.println(PROGRAM_NAME + ": error opening properties file");
+      System.exit(EXIT_FAILURE);
+    } catch (IOException e) {
+      System.err.println(PROGRAM_NAME + ": error writing properties file");
+      System.exit(EXIT_FAILURE);
+    }
+
+    syncProcess = null;
     // at present, all changes to inodes, data blocks,
     // and free list blocks
     // are written as they go, so this method does nothing.
@@ -943,6 +981,20 @@ public class Kernel {
     return DirectoryEntry.DIRECTORY_ENTRY_SIZE;
   }
 
+  public static short umask(short newUmask) {
+    try {
+      newUmask = Short.parseShort(Short.toString(newUmask), 8);
+    } catch (NumberFormatException e) {
+      System.err.println(PROGRAM_NAME + ": invalid number for property process.umask");
+      System.exit(EXIT_FAILURE);
+    }
+
+    short oldUmask = process.getUmask();
+    System.out.println("Set umask to " + Integer.toOctalString(newUmask));
+    process.setUmask(newUmask);
+    return oldUmask;
+  }
+
   /*
   to be done:
          int access(const char *pathname, int mode);
@@ -968,6 +1020,8 @@ public class Kernel {
    * different processes at different times.
    */
   private static ProcessContext process = null;
+  /** This is an internal variable for the simulator which used only for finalization */
+  private static ProcessContext syncProcess = null;
 
   /** The number of processes. */
   private static int processCount = 0;
@@ -1366,13 +1420,13 @@ public class Kernel {
     }
     IndexNode currIndexNode = new IndexNode();
     short currIndexNodeNumber = getCurrIndexNodeNumber(pathname, currIndexNode);
-     //System.out.println("Before:" + process.getUid() + " " + currIndexNode.getUid());
+    // System.out.println("Before:" + process.getUid() + " " + currIndexNode.getUid());
     // short currIndexNodeNumber = fileDescriptor.getIndexNodeNumber();
     closeChanged(currIndexNodeNumber);
     currIndexNode.setUid(uid);
     FileSystem fileSystem = openFileSystems[ROOT_FILE_SYSTEM];
     fileSystem.writeIndexNode(currIndexNode, currIndexNodeNumber);
-     //System.out.println("After: " + process.getUid() + " " + currIndexNode.getUid());
+    // System.out.println("After: " + process.getUid() + " " + currIndexNode.getUid());
     return uid;
   }
 

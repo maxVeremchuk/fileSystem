@@ -64,11 +64,7 @@ public class mkdir {
     byte[] directoryEntryBuffer = new byte[DirectoryEntry.DIRECTORY_ENTRY_SIZE];
 
     // for each argument given on the command line
-    for (int i = 0; i < args.length; i++) {
-      // given the argument a better name
-      String name = args[i];
-      int status = 0;
-
+    for (String name : args) {
       // call creat() to create the file
       int newDir = Kernel.creat(name, Kernel.S_IFDIR);
       if (newDir < 0) {
@@ -79,8 +75,8 @@ public class mkdir {
 
       // get file info for "."
       Stat selfStat = new Stat();
-      status = Kernel.fstat(newDir, selfStat);
-      if (status < 0) {
+      int process_status = Kernel.fstat(newDir, selfStat);
+      if (process_status < 0) {
         Kernel.perror(PROGRAM_NAME);
         Kernel.exit(3);
       }
@@ -88,8 +84,8 @@ public class mkdir {
       // add entry for "."
       DirectoryEntry self = new DirectoryEntry(selfStat.getIno(), ".");
       self.write(directoryEntryBuffer, 0);
-      status = Kernel.write(newDir, directoryEntryBuffer, directoryEntryBuffer.length);
-      if (status < 0) {
+      process_status = Kernel.write(newDir, directoryEntryBuffer, directoryEntryBuffer.length);
+      if (process_status < 0) {
         Kernel.perror(PROGRAM_NAME);
         Kernel.exit(4);
       }
@@ -101,15 +97,15 @@ public class mkdir {
       // add entry for ".."
       DirectoryEntry parent = new DirectoryEntry(parentStat.getIno(), "..");
       parent.write(directoryEntryBuffer, 0);
-      status = Kernel.write(newDir, directoryEntryBuffer, directoryEntryBuffer.length);
-      if (status < 0) {
+      process_status = Kernel.write(newDir, directoryEntryBuffer, directoryEntryBuffer.length);
+      if (process_status < 0) {
         Kernel.perror(PROGRAM_NAME);
         Kernel.exit(5);
       }
 
       // call close() to close the file
-      status = Kernel.close(newDir);
-      if (status < 0) {
+      process_status = Kernel.close(newDir);
+      if (process_status < 0) {
         Kernel.perror(PROGRAM_NAME);
         Kernel.exit(6);
       }
