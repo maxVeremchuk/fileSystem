@@ -5,6 +5,12 @@ public class umask {
    */
   public static final String PROGRAM_NAME = "umask";
 
+  public static void showUsage() throws Exception {
+    System.err.println(
+        PROGRAM_NAME + ": usage: java " + PROGRAM_NAME + " <octal number from 000 to 777>");
+    Kernel.exit(1);
+  }
+
   /**
    * Change umask
    *
@@ -16,15 +22,19 @@ public class umask {
 
     // make sure we got the correct number of parameters
     if (argv.length != 1) {
-      System.err.println(
-          PROGRAM_NAME + ": usage: java " + PROGRAM_NAME + " octal number from 000 to 777");
-      Kernel.exit(1);
+      showUsage();
     }
 
-    // give the parameters more meaningful names
     String umask = argv[0];
+    if (!umask.matches("\\d+")) {
+      showUsage();
+    }
 
     int intUmask = Integer.parseInt(umask, 8);
+
+    if (intUmask < 0 || intUmask > Integer.parseInt("777", 8)) {
+      showUsage();
+    }
 
     Kernel.umask((short) intUmask);
 

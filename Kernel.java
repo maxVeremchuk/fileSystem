@@ -1088,6 +1088,10 @@ public class Kernel {
       System.exit(EXIT_FAILURE);
     }
 
+    if (0 < newUmask || newUmask > Integer.parseInt("777", 8)) {
+      process.errno = EINVAL;
+    }
+
     short oldUmask = process.getUmask();
     System.out.println("Set umask to " + String.format("%03o", newUmask));
     process.setUmask(newUmask);
@@ -1098,6 +1102,7 @@ public class Kernel {
 
     int fd = open(path1, O_RDWR);
     if (fd < 0) {
+      process.errno = EACCES;
       return -1;
     }
 
@@ -1105,6 +1110,7 @@ public class Kernel {
     IndexNode indexNode1 = fileDescriptor1.getIndexNode();
     if ((indexNode1.getMode() & S_IFMT) == S_IFDIR) {
       System.out.println("You can't create hard link to directory!");
+      process.errno = EISDIR;
       return -1;
     }
 
@@ -1144,7 +1150,8 @@ public class Kernel {
       // and insert the new element immediately following
       insertFile(dir, fileDescriptor1.getIndexNodeNumber(), name);
     } else {
-      System.out.println("File already exists!");
+      process.errno = EEXIST;
+      System.err.println(PROGRAM_NAME + ": file already exists!");
       return -1;
     }
 

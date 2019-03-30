@@ -25,6 +25,11 @@ public class ln {
     System.out.println("Path 2: " + argv[1]);
     int result = Kernel.link(argv[0], argv[1]);
 
+    if (result < 0) {
+      Kernel.perror(PROGRAM_NAME);
+      Kernel.exit(1);
+    }
+
     // exit with success if we read all the files without error
     Kernel.exit(0);
   }
