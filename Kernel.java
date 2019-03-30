@@ -3,13 +3,14 @@
  * 456789012345678901234567890123456789012345678901234567890123456789012
  */
 
-import javax.swing.plaf.synth.SynthTabbedPaneUI;
-import java.io.FileOutputStream;
-import java.util.StringTokenizer;
-import java.util.Properties;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+import java.util.StringTokenizer;
 
 /*
  * $Log: Kernel.java,v $
@@ -289,6 +290,106 @@ public class Kernel {
     return 0;
   }
 
+  public static List<Object> getFileFromPath(String fullPath) throws Exception {
+    StringBuffer dirname = new StringBuffer("/");
+    FileSystem fileSystem = openFileSystems[ROOT_FILE_SYSTEM];
+    IndexNode currIndexNode = getRootIndexNode();
+    IndexNode prevIndexNode = null;
+    short indexNodeNumber = FileSystem.ROOT_INDEX_NODE_NUMBER;
+
+    StringTokenizer st = new StringTokenizer(fullPath, "/");
+    String name = "."; // start at root node
+    while (st.hasMoreTokens()) {
+      name = st.nextToken();
+      if (!name.equals("")) {
+        // check to see if the current node is a directory
+        if ((currIndexNode.getMode() & S_IFMT) != S_IFDIR) {
+          // return (ENOTDIR) if a needed directory is not a directory
+          process.errno = ENOTDIR;
+          List<Object> objects = new ArrayList<>();
+          objects.add(-1);
+          return objects;
+        }
+
+        // check to see if it is readable by the user
+        // ??? tbd
+        // return (EACCES) if a needed directory is not readable
+
+        if (st.hasMoreTokens()) {
+          dirname.append(name);
+          dirname.append('/');
+        }
+
+        // get the next inode corresponding to the token
+        prevIndexNode = currIndexNode;
+        currIndexNode = new IndexNode();
+        indexNodeNumber = findNextIndexNode(fileSystem, prevIndexNode, name, currIndexNode);
+      }
+    }
+
+    List<Object> objects = new ArrayList<>();
+    objects.add(0);
+    objects.add(dirname);
+    objects.add(fileSystem);
+    objects.add(currIndexNode);
+    objects.add(indexNodeNumber);
+    objects.add(name);
+
+    return objects;
+  }
+
+  private static void insertFile(int dir, short newInode, String name) throws Exception {
+    int status;
+    DirectoryEntry newDirectoryEntry = new DirectoryEntry(newInode, name);
+    DirectoryEntry currentDirectoryEntry = new DirectoryEntry();
+    while (true) {
+      // read an entry from the directory
+      status = readdir(dir, currentDirectoryEntry);
+      if (status < 0) {
+        System.err.println(PROGRAM_NAME + ": error reading directory in creat");
+        System.exit(EXIT_FAILURE);
+      } else if (status == 0) {
+        // if no entry read, write the new item at the current
+        // location and break
+        writedir(dir, newDirectoryEntry);
+        break;
+      } else {
+        // if current item > new item, write the new item in
+        // place of the old one and break
+        if (currentDirectoryEntry.getName().compareTo(newDirectoryEntry.getName()) > 0) {
+          int seek_status = lseek(dir, -DirectoryEntry.DIRECTORY_ENTRY_SIZE, 1);
+          if (seek_status < 0) {
+            System.err.println(PROGRAM_NAME + ": error during seek in creat");
+            System.exit(EXIT_FAILURE);
+          }
+          writedir(dir, newDirectoryEntry);
+          break;
+        }
+      }
+    }
+    // copy the rest of the directory entries out to the file
+    while (status > 0) {
+      DirectoryEntry nextDirectoryEntry = new DirectoryEntry();
+      // read next item
+      status = readdir(dir, nextDirectoryEntry);
+      if (status > 0) {
+        // in its place
+        int seek_status = lseek(dir, -DirectoryEntry.DIRECTORY_ENTRY_SIZE, 1);
+        if (seek_status < 0) {
+          System.err.println(PROGRAM_NAME + ": error during seek in creat");
+          System.exit(EXIT_FAILURE);
+        }
+      }
+      // write current item
+      writedir(dir, currentDirectoryEntry);
+      // current item = next item
+      currentDirectoryEntry = nextDirectoryEntry;
+    }
+
+    // close the directory
+    close(dir);
+  }
+
   /**
    * Creates a file or directory with the specified mode.
    *
@@ -314,39 +415,15 @@ public class Kernel {
     // get the full path
     String fullPath = getFullPath(pathname);
 
-    StringBuffer dirname = new StringBuffer("/");
-    FileSystem fileSystem = openFileSystems[ROOT_FILE_SYSTEM];
-    IndexNode currIndexNode = getRootIndexNode();
-    IndexNode prevIndexNode = null;
-    short indexNodeNumber = FileSystem.ROOT_INDEX_NODE_NUMBER;
+    List<Object> returnParams = getFileFromPath(fullPath);
+    int errorCode = (Integer) returnParams.get(0);
+    if (errorCode != 0) return errorCode;
 
-    StringTokenizer st = new StringTokenizer(fullPath, "/");
-    String name = "."; // start at root node
-    while (st.hasMoreTokens()) {
-      name = st.nextToken();
-      if (!name.equals("")) {
-        // check to see if the current node is a directory
-        if ((currIndexNode.getMode() & S_IFMT) != S_IFDIR) {
-          // return (ENOTDIR) if a needed directory is not a directory
-          process.errno = ENOTDIR;
-          return -1;
-        }
-
-        // check to see if it is readable by the user
-        // ??? tbd
-        // return (EACCES) if a needed directory is not readable
-
-        if (st.hasMoreTokens()) {
-          dirname.append(name);
-          dirname.append('/');
-        }
-
-        // get the next inode corresponding to the token
-        prevIndexNode = currIndexNode;
-        currIndexNode = new IndexNode();
-        indexNodeNumber = findNextIndexNode(fileSystem, prevIndexNode, name, currIndexNode);
-      }
-    }
+    StringBuffer dirname = (StringBuffer) returnParams.get(1);
+    FileSystem fileSystem = (FileSystem) returnParams.get(2);
+    IndexNode currIndexNode = (IndexNode) returnParams.get(3);
+    short indexNodeNumber = (Short) returnParams.get(4);
+    String name = (String) returnParams.get(5);
 
     // ??? we need to set some fields in the file descriptor
     int flags = O_WRONLY; // ???
@@ -415,55 +492,7 @@ public class Kernel {
 
       // scan past the directory entries less than the current entry
       // and insert the new element immediately following
-      int status;
-      DirectoryEntry newDirectoryEntry = new DirectoryEntry(newInode, name);
-      DirectoryEntry currentDirectoryEntry = new DirectoryEntry();
-      while (true) {
-        // read an entry from the directory
-        status = readdir(dir, currentDirectoryEntry);
-        if (status < 0) {
-          System.err.println(PROGRAM_NAME + ": error reading directory in creat");
-          System.exit(EXIT_FAILURE);
-        } else if (status == 0) {
-          // if no entry read, write the new item at the current
-          // location and break
-          writedir(dir, newDirectoryEntry);
-          break;
-        } else {
-          // if current item > new item, write the new item in
-          // place of the old one and break
-          if (currentDirectoryEntry.getName().compareTo(newDirectoryEntry.getName()) > 0) {
-            int seek_status = lseek(dir, -DirectoryEntry.DIRECTORY_ENTRY_SIZE, 1);
-            if (seek_status < 0) {
-              System.err.println(PROGRAM_NAME + ": error during seek in creat");
-              System.exit(EXIT_FAILURE);
-            }
-            writedir(dir, newDirectoryEntry);
-            break;
-          }
-        }
-      }
-      // copy the rest of the directory entries out to the file
-      while (status > 0) {
-        DirectoryEntry nextDirectoryEntry = new DirectoryEntry();
-        // read next item
-        status = readdir(dir, nextDirectoryEntry);
-        if (status > 0) {
-          // in its place
-          int seek_status = lseek(dir, -DirectoryEntry.DIRECTORY_ENTRY_SIZE, 1);
-          if (seek_status < 0) {
-            System.err.println(PROGRAM_NAME + ": error during seek in creat");
-            System.exit(EXIT_FAILURE);
-          }
-        }
-        // write current item
-        writedir(dir, currentDirectoryEntry);
-        // current item = next item
-        currentDirectoryEntry = nextDirectoryEntry;
-      }
-
-      // close the directory
-      close(dir);
+      insertFile(dir, newInode, name);
     } else {
       // file does exist ( indexNodeNumber >= 0 )
 
@@ -594,6 +623,33 @@ public class Kernel {
   /** Open for read or write access. */
   public static final int O_RDWR = 2;
 
+  private static int checkMode(IndexNode indexNode, int flags) {
+    boolean sameUser = (indexNode.getUid() == process.getUid()),
+        sameGroup = (indexNode.getGid() == process.getGid()),
+        canRead = false,
+        canWrite = false;
+
+    if ((sameUser && (indexNode.getMode() & S_IRUSR) == S_IRUSR)
+        || (sameGroup && (indexNode.getMode() & S_IRGRP) == S_IRGRP)) canRead = true;
+    else if (!sameGroup && !sameUser && (indexNode.getMode() & S_IROTH) == S_IROTH) canRead = true;
+
+    if ((sameUser && (indexNode.getMode() & S_IWUSR) == S_IWUSR)
+        || (sameGroup && (indexNode.getMode() & S_IWGRP) == S_IWGRP)) canWrite = true;
+    else if (!sameGroup && !sameUser && (indexNode.getMode() & S_IWOTH) == S_IWOTH) canWrite = true;
+
+    if ((flags == O_RDONLY || flags == O_RDWR) && !canRead) {
+      process.errno = EACCES;
+      return -1;
+    }
+
+    if ((flags == O_WRONLY || flags == O_RDWR) && !canWrite) {
+      process.errno = EACCES;
+      return -1;
+    }
+
+    return 0;
+  }
+
   /**
    * Opens a file or directory for reading, writing, or both reading and writing.
    *
@@ -623,9 +679,12 @@ public class Kernel {
 
     // ??? return (Exxx) if the file is not readable
     // and was opened O_RDONLY or O_RDWR
-
     // ??? return (Exxx) if the file is not writable
     // and was opened O_WRONLY or O_RDWR
+
+    int exitCode = checkMode(indexNode, flags);
+
+    if (exitCode != 0) return exitCode;
 
     // set up the file descriptor
     FileDescriptor fileDescriptor =
@@ -838,6 +897,28 @@ public class Kernel {
     return 0;
   }
 
+  private static String getPropertiesName() {
+    String propertyFileName = System.getProperty("filesys.conf");
+    if (propertyFileName == null) propertyFileName = "filesys.conf";
+    return propertyFileName;
+  }
+
+  private static Properties getPropertiesFiles(String propertyFileName) {
+    Properties properties = new Properties();
+    try {
+      FileInputStream in = new FileInputStream(propertyFileName);
+      properties.load(in);
+      in.close();
+    } catch (FileNotFoundException e) {
+      System.err.println(PROGRAM_NAME + ": error opening properties file");
+      System.exit(EXIT_FAILURE);
+    } catch (IOException e) {
+      System.err.println(PROGRAM_NAME + ": error reading properties file");
+      System.exit(EXIT_FAILURE);
+    }
+    return properties;
+  }
+
   /**
    * First commits inodes to buffers, and then buffers to disk.
    *
@@ -853,20 +934,8 @@ public class Kernel {
     // write out inode blocks if updated
     // write out data blocks if updated
 
-    String propertyFileName = System.getProperty("filesys.conf");
-    if (propertyFileName == null) propertyFileName = "filesys.conf";
-    Properties properties = new Properties();
-    try {
-      FileInputStream in = new FileInputStream(propertyFileName);
-      properties.load(in);
-      in.close();
-    } catch (FileNotFoundException e) {
-      System.err.println(PROGRAM_NAME + ": error opening properties file");
-      System.exit(EXIT_FAILURE);
-    } catch (IOException e) {
-      System.err.println(PROGRAM_NAME + ": error reading properties file");
-      System.exit(EXIT_FAILURE);
-    }
+    String propertyFileName = getPropertiesName();
+    Properties properties = getPropertiesFiles(propertyFileName);
 
     properties.setProperty("process.umask", String.format("%03o", syncProcess.getUmask()));
     properties.setProperty("filesystem.root.filename", "filesys.dat");
@@ -892,9 +961,6 @@ public class Kernel {
     }
 
     syncProcess = null;
-    // at present, all changes to inodes, data blocks,
-    // and free list blocks
-    // are written as they go, so this method does nothing.
   }
 
   /**
@@ -1045,39 +1111,14 @@ public class Kernel {
     // get the full path
     String fullPath = getFullPath(path2);
 
-    StringBuffer dirname = new StringBuffer("/");
-    FileSystem fileSystem = openFileSystems[ROOT_FILE_SYSTEM];
-    IndexNode currIndexNode = getRootIndexNode();
-    IndexNode prevIndexNode = null;
-    short indexNodeNumber = FileSystem.ROOT_INDEX_NODE_NUMBER;
+    List<Object> returnParams = getFileFromPath(fullPath);
+    int errorCode = (Integer) returnParams.get(0);
+    if (errorCode != 0) return errorCode;
 
-    StringTokenizer st = new StringTokenizer(fullPath, "/");
-    String name = "."; // start at root node
-    while (st.hasMoreTokens()) {
-      name = st.nextToken();
-      if (!name.equals("")) {
-        // check to see if the current node is a directory
-        if ((currIndexNode.getMode() & S_IFMT) != S_IFDIR) {
-          // return (ENOTDIR) if a needed directory is not a directory
-          process.errno = ENOTDIR;
-          return -1;
-        }
-
-        // check to see if it is readable by the user
-        // ??? tbd
-        // return (EACCES) if a needed directory is not readable
-
-        if (st.hasMoreTokens()) {
-          dirname.append(name);
-          dirname.append('/');
-        }
-
-        // get the next inode corresponding to the token
-        prevIndexNode = currIndexNode;
-        currIndexNode = new IndexNode();
-        indexNodeNumber = findNextIndexNode(fileSystem, prevIndexNode, name, currIndexNode);
-      }
-    }
+    StringBuffer dirname = (StringBuffer) returnParams.get(1);
+    IndexNode currIndexNode = (IndexNode) returnParams.get(3);
+    short indexNodeNumber = (Short) returnParams.get(4);
+    String name = (String) returnParams.get(5);
 
     if (indexNodeNumber < 0) {
       // file does not exist.  We check to see if we can create it.
@@ -1101,56 +1142,7 @@ public class Kernel {
 
       // scan past the directory entries less than the current entry
       // and insert the new element immediately following
-      int status;
-      DirectoryEntry newDirectoryEntry =
-          new DirectoryEntry(fileDescriptor1.getIndexNodeNumber(), name);
-      DirectoryEntry currentDirectoryEntry = new DirectoryEntry();
-      while (true) {
-        // read an entry from the directory
-        status = readdir(dir, currentDirectoryEntry);
-        if (status < 0) {
-          System.err.println(PROGRAM_NAME + ": error reading directory in creat");
-          System.exit(EXIT_FAILURE);
-        } else if (status == 0) {
-          // if no entry read, write the new item at the current
-          // location and break
-          writedir(dir, newDirectoryEntry);
-          break;
-        } else {
-          // if current item > new item, write the new item in
-          // place of the old one and break
-          if (currentDirectoryEntry.getName().compareTo(newDirectoryEntry.getName()) > 0) {
-            int seek_status = lseek(dir, -DirectoryEntry.DIRECTORY_ENTRY_SIZE, 1);
-            if (seek_status < 0) {
-              System.err.println(PROGRAM_NAME + ": error during seek in creat");
-              System.exit(EXIT_FAILURE);
-            }
-            writedir(dir, newDirectoryEntry);
-            break;
-          }
-        }
-      }
-      // copy the rest of the directory entries out to the file
-      while (status > 0) {
-        DirectoryEntry nextDirectoryEntry = new DirectoryEntry();
-        // read next item
-        status = readdir(dir, nextDirectoryEntry);
-        if (status > 0) {
-          // in its place
-          int seek_status = lseek(dir, -DirectoryEntry.DIRECTORY_ENTRY_SIZE, 1);
-          if (seek_status < 0) {
-            System.err.println(PROGRAM_NAME + ": error during seek in creat");
-            System.exit(EXIT_FAILURE);
-          }
-        }
-        // write current item
-        writedir(dir, currentDirectoryEntry);
-        // current item = next item
-        currentDirectoryEntry = nextDirectoryEntry;
-      }
-
-      // close the directory
-      close(dir);
+      insertFile(dir, fileDescriptor1.getIndexNodeNumber(), name);
     } else {
       System.out.println("File already exists!");
       return -1;
@@ -1214,20 +1206,8 @@ public class Kernel {
     // check to see if the name of an alternate configuration
     // file has been specified.  This can be done, for example,
     //   java -Dfilesys.conf=myfile.txt program-name parameter ...
-    String propertyFileName = System.getProperty("filesys.conf");
-    if (propertyFileName == null) propertyFileName = "filesys.conf";
-    Properties properties = new Properties();
-    try {
-      FileInputStream in = new FileInputStream(propertyFileName);
-      properties.load(in);
-      in.close();
-    } catch (FileNotFoundException e) {
-      System.err.println(PROGRAM_NAME + ": error opening properties file");
-      System.exit(EXIT_FAILURE);
-    } catch (IOException e) {
-      System.err.println(PROGRAM_NAME + ": error reading properties file");
-      System.exit(EXIT_FAILURE);
-    }
+    String propertyFileName = getPropertiesName();
+    Properties properties = getPropertiesFiles(propertyFileName);
 
     // get the root file system properties
     String rootFileSystemFilename =
@@ -1253,7 +1233,7 @@ public class Kernel {
       System.exit(EXIT_FAILURE);
     }
 
-    short umask = 0002;
+    short umask = 02;
     try {
       umask = Short.parseShort(properties.getProperty("process.umask", "002"), 8);
     } catch (NumberFormatException e) {
@@ -1356,6 +1336,21 @@ public class Kernel {
     return 0;
   }
 
+  private static int check_fd_for_mode(int fd, int mode) {
+    int status = check_fd(fd);
+    if (status < 0) return -1;
+
+    FileDescriptor fileDescriptor = process.openFiles[fd];
+    int flags = fileDescriptor.getFlags();
+    if ((flags != mode) && (flags != O_RDWR)) {
+      // return (EBADF) if the file is not open for reading
+      process.errno = EBADF;
+      return -1;
+    }
+
+    return 0;
+  }
+
   /**
    * Check to see if the integer given is a valid file descriptor index for the current process, and
    * if so, whether the file is open for reading. Sets errno to EBADF if invalid or not open for
@@ -1369,18 +1364,7 @@ public class Kernel {
    *     valid or is not open for reading.
    */
   private static int check_fd_for_read(int fd) {
-    int status = check_fd(fd);
-    if (status < 0) return -1;
-
-    FileDescriptor fileDescriptor = process.openFiles[fd];
-    int flags = fileDescriptor.getFlags();
-    if ((flags != O_RDONLY) && (flags != O_RDWR)) {
-      // return (EBADF) if the file is not open for reading
-      process.errno = EBADF;
-      return -1;
-    }
-
-    return 0;
+    return check_fd_for_mode(fd, O_RDONLY);
   }
 
   /**
@@ -1396,18 +1380,7 @@ public class Kernel {
    *     valid or is not open for writing.
    */
   private static int check_fd_for_write(int fd) {
-    int status = check_fd(fd);
-    if (status < 0) return -1;
-
-    FileDescriptor fileDescriptor = process.openFiles[fd];
-    int flags = fileDescriptor.getFlags();
-    if ((flags != O_WRONLY) && (flags != O_RDWR)) {
-      // return (EBADF) if the file is not open for writing
-      process.errno = EBADF;
-      return -1;
-    }
-
-    return 0;
+    return check_fd_for_mode(fd, O_WRONLY);
   }
 
   /**
@@ -1418,7 +1391,7 @@ public class Kernel {
    * @return the resulting fully qualified path name
    */
   private static String getFullPath(String pathname) {
-    String fullPath = null;
+    String fullPath;
 
     // make sure the path starts with a slash
     if (pathname.startsWith("/")) fullPath = pathname;
@@ -1630,10 +1603,10 @@ public class Kernel {
 
     short currMode = currIndexNode.getMode();
 
-
     String currModeOctal = Integer.toOctalString(currMode);
     String modeOctal = Integer.toString(mode);
-    String newMode = currModeOctal.substring(0, currModeOctal.length() - modeOctal.length()) + modeOctal;
+    String newMode =
+        currModeOctal.substring(0, currModeOctal.length() - modeOctal.length()) + modeOctal;
 
     currIndexNode.setMode(Short.parseShort(newMode, 8));
 

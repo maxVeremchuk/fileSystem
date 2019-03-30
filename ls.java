@@ -55,10 +55,6 @@ public class ls {
           Kernel.exit(1);
         }
 
-        // print a heading for this directory
-        System.out.println();
-        System.out.println(name + ":");
-
         // create a directory entry structure to hold data as we read
         DirectoryEntry directoryEntry = new DirectoryEntry();
         int count = 0;
@@ -103,6 +99,17 @@ public class ls {
     Kernel.exit(0);
   }
 
+  private static String convertMode(int mode) {
+    StringBuilder stringBuilder = new StringBuilder();
+    String accessStr = "xrw";
+    for (int i = 2; i >= 0; i--) {
+      int pow_2 = (int) Math.pow(2, i);
+      if ((mode & pow_2) == pow_2) stringBuilder.append(accessStr.charAt(i));
+      else stringBuilder.append('-');
+    }
+    return stringBuilder.toString();
+  }
+
   /**
    * Print a listing for a particular file. This is a convenience method.
    *
@@ -114,16 +121,18 @@ public class ls {
     StringBuffer s = new StringBuffer();
 
     // a temporary string
-    String t = null;
+    String t;
     short ts = 0;
 
     // append mode information
     ts = (short) stat.getMode();
-    s.append(' ');
-    // s.append(ts);
-    s.append((ts & Kernel.S_IRWXU) >> 6);
-    s.append((ts & Kernel.S_IRWXG) >> 3);
-    s.append(ts & Kernel.S_IRWXO);
+
+    if ((ts & Kernel.S_IFMT) == Kernel.S_IFREG) s.append('-');
+    else if ((ts & Kernel.S_IFMT) == Kernel.S_IFDIR) s.append('d');
+
+    s.append(convertMode((ts & Kernel.S_IRWXU) >> 6));
+    s.append(convertMode((ts & Kernel.S_IRWXG) >> 3));
+    s.append(convertMode(ts & Kernel.S_IRWXO));
     s.append(' ');
 
     // append uid info

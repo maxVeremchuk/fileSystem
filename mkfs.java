@@ -224,7 +224,16 @@ public class mkfs {
     rootIndexNode.setBlockAddress(0, 0);
 
     // the root inode is a directory inode
-    rootIndexNode.setMode(Kernel.S_IFDIR);
+    rootIndexNode.setMode(
+        (short)
+            (Kernel.S_IFDIR
+                | Kernel.S_IRUSR
+                | Kernel.S_IWUSR
+                | Kernel.S_IXUSR
+                | Kernel.S_IRGRP
+                | Kernel.S_IXGRP
+                | Kernel.S_IROTH
+                | Kernel.S_IXOTH));
 
     // there are two directory entries in the root file system,
     // so we set the file size accordingly.

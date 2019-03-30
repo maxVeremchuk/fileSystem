@@ -12,7 +12,7 @@ public class find {
   /**
    * The name of this program. This is the program name that is used when displaying error messages.
    */
-  private static String PROGRAM_NAME = "find";
+  private static final String PROGRAM_NAME = "find";
 
   /**
    * Creates the directories given as command line arguments.
@@ -45,36 +45,34 @@ public class find {
     short type = (short) (stat.getMode() & Kernel.S_IFMT);
 
     // if name is a regular file, print the info
-    if (type == Kernel.S_IFREG) System.out.println(name);
+    if (type != Kernel.S_IFDIR) System.out.println(name);
     // if name is a directory open it and read the contents
-    else if (type == Kernel.S_IFDIR) {
+    else {
+      // print a heading for this directory
+      System.out.println(name);
+
       // open the directory
       int fd = Kernel.open(name, Kernel.O_RDONLY);
       if (fd < 0) {
         Kernel.perror(PROGRAM_NAME);
         System.err.println(PROGRAM_NAME + ": unable to open \"" + name + "\" for reading");
-        Kernel.exit(1);
-      }
+      } else {
 
-      // print a heading for this directory
-      System.out.println();
-      System.out.println(name + ":");
+        // create a directory entry structure to hold data as we read
+        DirectoryEntry directoryEntry = new DirectoryEntry();
+        // while we can read, print the information on each entry
+        while (true) {
+          // read an entry; quit loop if error or nothing read
+          process_status = Kernel.readdir(fd, directoryEntry);
+          if (process_status <= 0) break;
 
-      // create a directory entry structure to hold data as we read
-      DirectoryEntry directoryEntry = new DirectoryEntry();
-      // while we can read, print the information on each entry
-      while (true) {
-        // read an entry; quit loop if error or nothing read
-        process_status = Kernel.readdir(fd, directoryEntry);
-        if (process_status <= 0) break;
-
-        // get the name from the entry
-        String entryName = directoryEntry.getName();
-        String separ = name.equals("/") ? "" : "/";
-        String fullName = name + separ + entryName;
-        if (!entryName.equals(".") && !entryName.equals("..")) {
-          System.out.println(fullName);
-          traversePath(fullName);
+          // get the name from the entry
+          String entryName = directoryEntry.getName();
+          String separ = name.equals("/") ? "" : "/";
+          String fullName = name + separ + entryName;
+          if (!entryName.equals(".") && !entryName.equals("..")) {
+            traversePath(fullName);
+          }
         }
       }
 
