@@ -129,6 +129,10 @@ public class ls {
 
     if ((ts & Kernel.S_IFMT) == Kernel.S_IFREG) s.append('-');
     else if ((ts & Kernel.S_IFMT) == Kernel.S_IFDIR) s.append('d');
+    else if (((ts & Kernel.S_IFMT) == Kernel.S_IFCHR) || ((ts & Kernel.S_IFMT) == Kernel.S_IFMPC))
+      s.append('c');
+    else if (((ts & Kernel.S_IFMT) == Kernel.S_IFBLK) || ((ts & Kernel.S_IFMT) == Kernel.S_IFMPB))
+      s.append('b');
 
     s.append(convertMode((ts & Kernel.S_IRWXU) >> 6));
     s.append(convertMode((ts & Kernel.S_IRWXG) >> 3));
