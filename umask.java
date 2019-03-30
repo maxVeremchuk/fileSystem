@@ -26,15 +26,13 @@ public class umask {
     }
 
     String umask = argv[0];
-    if (!umask.matches("\\d+")) {
+    if (!umask.matches("\\[0-7]+")) {
       showUsage();
     }
 
     int intUmask = Integer.parseInt(umask, 8);
 
-    if (intUmask < 0 || intUmask > Integer.parseInt("777", 8)) {
-      showUsage();
-    }
+    intUmask &= 0777; // see man umask for detailed description
 
     Kernel.umask((short) intUmask);
 
