@@ -1609,13 +1609,10 @@ public class Kernel {
     closeChanged(currIndexNodeNumber);
 
     short currMode = currIndexNode.getMode();
-
-    String currModeOctal = Integer.toOctalString(currMode);
-    String modeOctal = Integer.toString(mode);
-    String newMode =
-        currModeOctal.substring(0, currModeOctal.length() - modeOctal.length()) + modeOctal;
-
-    currIndexNode.setMode(Short.parseShort(newMode, 8));
+    mode = (short)Integer.parseInt(String.valueOf(mode), 8);
+    int oldPermissions = currMode % ((int) Math.pow(2, 9));
+    int newMode = currMode - oldPermissions + mode;
+    currIndexNode.setMode((short)newMode);
 
     FileSystem fileSystem = openFileSystems[ROOT_FILE_SYSTEM];
     fileSystem.writeIndexNode(currIndexNode, currIndexNodeNumber);
