@@ -1,11 +1,15 @@
-/** Created by ahoma on 28/03/2019. Copyright (c) 2019 Andrii Khoma. All rights reserved. */
+/*
+ * Created by ahoma on 28/03/2019.
+ * Copyright (c) 2019 Andrii Khoma. All rights reserved.
+ */
+
 public class umask {
   /**
    * The name of this program. This is the program name that is used when displaying error messages.
    */
   public static final String PROGRAM_NAME = "umask";
 
-  public static void showUsage() throws Exception {
+  private static void showUsage() throws Exception {
     System.err.println(
         PROGRAM_NAME + ": usage: java " + PROGRAM_NAME + " <octal number from 000 to 777>");
     Kernel.exit(1);
@@ -26,13 +30,13 @@ public class umask {
     }
 
     String umask = argv[0];
-    if (!umask.matches("\\[0-7]+")) {
+    if (!umask.matches("[0-7]+")) {
       showUsage();
     }
 
     int intUmask = Integer.parseInt(umask, 8);
 
-    intUmask &= 0777; // see man umask for detailed description
+    intUmask &= 511; // &0777 see man umask for detailed description
 
     Kernel.umask((short) intUmask);
 

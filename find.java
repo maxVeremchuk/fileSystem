@@ -31,7 +31,7 @@ public class find {
     traversePath(args[0]);
   }
 
-  public static void traversePath(String name) throws Exception {
+  private static void traversePath(String name) throws Exception {
     // stat the name to get information about the file or directory
     Stat stat = new Stat();
     int process_status = Kernel.stat(name, stat);

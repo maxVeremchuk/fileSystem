@@ -4,7 +4,6 @@
 
 /*
  * $Log: mkdir.java,v $
- * Revision 1.7  2001/10/07 23:23:23  rayo
  * added internal documentation, cleaned up javadoc
  *
  * Revision 1.6  2001/09/28 13:20:20  rayo

@@ -40,10 +40,7 @@ public class tee {
    * The size of the buffer to be used for reading from the file. A buffer of this size is filled
    * before writing to the output file.
    */
-  public static final int BUF_SIZE = 4096;
-
-  /** The file mode to use when creating the output file. */
-  public static final short OUTPUT_MODE = 0700;
+  private static final int BUF_SIZE = 4096;
 
   /**
    * Copies standard input to standard output and to a file.

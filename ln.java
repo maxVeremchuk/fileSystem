@@ -1,4 +1,8 @@
-/** Created by ahoma on 28/03/2019. Copyright (c) 2019 Andrii Khoma. All rights reserved. */
+/*
+ * Created by ahoma on 28/03/2019.
+ * Copyright (c) 2019 Andrii Khoma. All rights reserved.
+ */
+
 public class ln {
   /**
    * The name of this program. This is the program name that is used when displaying error messages.

@@ -45,11 +45,7 @@ public class cp {
   public static final String PROGRAM_NAME = "cp";
 
   /** The size of the buffer to be used when reading files. */
-  public static final int BUF_SIZE = 4096;
-
-  /** The file mode to use when creating the output file. */
-  // ??? perhaps this should be the same mode as the input file
-  public static final short OUTPUT_MODE = 0700;
+  private static final int BUF_SIZE = 4096;
 
   /**
    * Copies an input file to an output file.
